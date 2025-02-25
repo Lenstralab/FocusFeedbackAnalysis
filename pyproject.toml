@@ -1,0 +1,51 @@
+[project]
+name = "focusfeedbackanalysis"
+version = "2025.1.0"
+description = "Focus feedback analysis, from time-lapse to time trace."
+license = { text = "GPL-3.0-or-later"}
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    { name = "Simona Antonova", email = "s.antonova@nki.nl" },
+    { name = "Jos Meeussen", email = "j.meeussen@nki.nl" },
+    { name = "Wim Pomp", email = "w.pomp@nki.nl" },
+    { name = "Tineke Lenstra", email = "t.lenstra@nki.nl" }
+]
+keywords = ["focus", "feedback", "trace"]
+packages = [{ include = "focusfeedbackanalysis" }]
+dependencies = [
+    "colorcet",
+    "matplotlib",
+    "ndbioimage",
+    "numba",
+    "numdifftools",
+    "numpy",
+    "opencv-python",
+    "parfor",
+    "pandas",
+    "pyyaml",
+    "roifile",
+    "ruamel.yaml",
+    "scikit-image",
+    "scipy",
+    "tiffwrite",
+    "tllab-common",
+    "trackpy",
+    "tqdm",
+]
+
+[project.urls]
+repository = "https://github.com/Lenstralab/FocusFeedbackAnalysis"
+
+[project.optional-dependencies]
+ffgui = [ "focusfeedbackgui @ git+https://github.com/Lenstralab/FocusFeedbackGUI.git" ]
+
+[project.scripts]
+focusfeedbackanalysis = "track_analysis:main"
+
+[tool.isort]
+line_length = 119
+
+[tool.ruff]
+line-length = 119
+format.skip-magic-trailing-comma = true

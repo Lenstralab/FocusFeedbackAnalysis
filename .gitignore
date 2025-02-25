@@ -1,0 +1,16 @@
+*.egg-info
+TransformParameters.0.txt
+*.tif
+*.pdf
+.idea
+/build/
+/dist/
+/target/
+/venv*/
+*.czi
+*.so
+._*
+*.log
+*sync-conflict*
+*.whl
+/notebooks/.ipynb_checkpoints/
