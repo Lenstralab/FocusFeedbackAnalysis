@@ -1,6 +1,6 @@
 [project]
 name = "focusfeedbackanalysis"
-version = "2025.1.0"
+version = "2025.2.0"
 description = "Focus feedback analysis, from time-lapse to time trace."
 license = { text = "GPL-3.0-or-later"}
 readme = "README.md"
@@ -49,3 +49,7 @@ line_length = 119
 [tool.ruff]
 line-length = 119
 format.skip-magic-trailing-comma = true
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

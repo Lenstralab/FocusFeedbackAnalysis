@@ -11,22 +11,21 @@ from scipy import interpolate, optimize, special
 from matplotlib import pyplot as plt
 
 
-
-def p_(diff_c: ArrayLike, r: float, dr: float, t: ArrayLike) -> ArrayLike:
+def p_(diff_c_t: ArrayLike, r: float, dr: float) -> ArrayLike:
     """ Probability of particle being in focus (moved max z from focus) after time t
         P in equation 5 in 10.1016/j.molcel.2024.01.020
     """
     return (
-        special.erf(np.abs(r - dr) / 2 / np.sqrt(diff_c * t)) + special.erf(np.abs(r + dr) / 2 / np.sqrt(diff_c * t))
+        special.erf(np.abs(r - dr) / 2 / np.sqrt(diff_c_t)) + special.erf(np.abs(r + dr) / 2 / np.sqrt(diff_c_t))
     ) / 2
 
 
 # def p_in_focus0(diff_c: ArrayLike, r: float, dr: float, t: ArrayLike, dt: ArrayLike) -> ArrayLike:
-#     return np.exp((t // dt) * np.log(p_(diff_c, r, dr, t)))
+#     return np.exp((t // dt) * np.log(p_(diff_c * t, r, dr)))
 #
 #
 # def p_in_focus1(diff_c: ArrayLike, r: float, dr: float, t: ArrayLike, dt: ArrayLike) -> ArrayLike:
-#     return p_(diff_c, r, dr, t) ** (t // dt)
+#     return p_(diff_c * t, r, dr) ** (t // dt)
 
 
 def p_in_focus0(diff_c: ArrayLike, r: float, dr: float, dt: ArrayLike,
@@ -41,7 +40,7 @@ def p_in_focus0(diff_c: ArrayLike, r: float, dr: float, dt: ArrayLike,
     ti = 0
     while q > min_p and ti < max_t:
         ti = dt * i
-        q *= p_(diff_c, r, dr, dt * i)
+        q *= p_(diff_c * dt * i, r, dr)
         t.append(ti)
         p.append(q)
         i += 1
@@ -55,7 +54,7 @@ def p_in_focus1(diff_c: ArrayLike, r: float, dr: float, dt: ArrayLike,
     p = []
     t = []
     i = 1
-    p0 = p_(diff_c, r, dr, dt)
+    p0 = p_(diff_c * dt, r, dr)
     ti = 0
     while q > min_p and ti < max_t:
         ti = dt * i
@@ -73,7 +72,7 @@ def total_time(diff_c: ArrayLike, r: ArrayLike, dr: ArrayLike, dt: ArrayLike, p:
     # abs to prevent going to -inf
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', category=RuntimeWarning)
-        return np.abs(dt * np.log(p) / np.log(p_(diff_c, r, dr, dt)))
+        return np.abs(dt * np.log(p) / np.log(p_(diff_c * dt, r, dr)))
 
 
 def get_dt(t: float, diff_c: float, r: float, dr: float, p: float) -> float:
@@ -97,6 +96,24 @@ def get_dt(t: float, diff_c: float, r: float, dr: float, p: float) -> float:
         fit = optimize.minimize_scalar(lambda dt: (f(dt) - log_t) ** 2, (minimum - 10, minimum))
         assert fit.success
         fit = optimize.minimize(lambda dt: (total_time(diff_c, r, dr, dt, p) - t) ** 2, fit.x, method="Nelder-Mead")
+        assert fit.success
+    return fit.x[0]
+
+
+def get_diff_c(t: float, dt: float, r: float, dr: float, p: float) -> float:
+    """ maximum diffusion constant (um2/s) for given time interval (s),
+        feedback range (um), feedback error (um) and p value
+    """
+    assert p < 1, "p value needs to be smaller than 1"
+    log_t = np.log(t)
+    with warnings.catch_warnings():
+        x = np.logspace(-5, 5)
+        y = np.log(total_time(x, r, dr, dt, p))
+        idx = np.isfinite(y)
+        f = interpolate.interp1d(x[idx], y[idx], fill_value="extrapolate")
+        fit = optimize.minimize_scalar(lambda diff_c: (f(diff_c) - log_t) ** 2, (-10, 0))
+        assert fit.success
+        fit = optimize.minimize(lambda diff_c: (total_time(diff_c, r, dr, dt, p) - t) ** 2, fit.x, method="Nelder-Mead")
         assert fit.success
     return fit.x[0]
 
