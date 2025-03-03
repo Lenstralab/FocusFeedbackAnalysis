@@ -22,6 +22,9 @@ fitting your pc.
 #### Option 2: Jupyterlab
 ``` pip install jupyterlab ```
 
+### Calibration and feedback accuracy assessment
+Check out the [calibration notebook](notebooks/calibration.ipynb).
+
 ### Experiment preparation
 Check out the [preparation notebook](notebooks/preparation.ipynb).
 
