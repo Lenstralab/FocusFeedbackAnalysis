@@ -260,7 +260,6 @@ def calibrate_intensity(
             a.append(res["detections"])
     a = pandas.concat(a)
     b = insert_z(a, im, channels, piezoval, timeval)
-    # b = insertZ(a, im, im.masterch, ress[-1]['q'], ress[-1]['dq'])
     b["z_piezo"] = a["z_um"]
     a = b
 

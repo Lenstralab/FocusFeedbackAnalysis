@@ -42,9 +42,9 @@ class TrackAnalysis:
     Analyze a time-lapse to construct tracks. A track is constructed on
     the locations of a label (particle in the label channel) in each
     frame. If the label (or label channel) is absent, the track is
-    constructed from the particle in the main channel. Particles in the
-    single molecule (sm) channel are localized on or around the location
-    of the label of main track.
+    constructed from the particle in the primary channel. Particles in the
+    secondary channel (channel_secondary) are localized on or around the
+    location of the label of primay track.
 
     If not done already for a previous analysis, the analysis will start
     with performing a calibration using z-stacks with beads. The argument
@@ -77,11 +77,12 @@ class TrackAnalysis:
     Args:
         image_file: (required) time-lapse image file to analyze
         channel_label: channel index/indices for the label if present
-        channel_main: channel index/indices for the main particle
-        channel_sm: channel index/indices for the single molecules (sm)
-        dist_channel: maximum distance (pixels) between the label or main
-            particle and the single molecule
-        dist_frame: maximum distance (pixels) between the label or main
+        channel_primary: channel index/indices for the particles to be tracked
+        channel_secondary: channel index/indices for the particles whose
+            intensity will be measured at positions of primary particles
+        dist_channel: maximum distance (pixels) between the label or primary
+            particles and secondary particles
+        dist_frame: maximum distance (pixels) between the label or primary
             particle in consecutive frames
         path_out: where to save the analysis
         mask_method: ("square", size), ("findcells", kwargs_dict),
@@ -92,14 +93,14 @@ class TrackAnalysis:
             (e.g. eGFP = 510) in the image file, the list needs to be in
             the same order as the channels in the image file
         colors: colors to be used during plotting, the colors need to be
-            in the order label, main, sm
-        track3D: wheter to use z information during linking
+            in the order label, primary, seccondary
+        track3D: whether to use z information during linking
     """
 
     image_file: Path | str | Imread
     channel_label: int | tuple = None
-    channel_main: int | tuple = None
-    channel_sm: int | tuple = None
+    channel_primary: int | tuple = None
+    channel_secondary: int | tuple = None
     channel_mask: int = 1
     dist_channel: float | tuple[int, float] = 3
     dist_frame: float | tuple[int, float] = 5
@@ -117,18 +118,18 @@ class TrackAnalysis:
             self.channel_label = tuple(self.channel_label)
         elif self.channel_label is None:
             self.channel_label = ()
-        if isinstance(self.channel_main, Number):
-            self.channel_main = (self.channel_main,)
-        elif isinstance(self.channel_main, list):
-            self.channel_main = tuple(self.channel_main)
-        elif self.channel_main is None:
-            self.channel_main = ()
-        if isinstance(self.channel_sm, Number):
-            self.channel_sm = (self.channel_sm,)
-        elif isinstance(self.channel_sm, list):
-            self.channel_sm = tuple(self.channel_sm)
-        elif self.channel_sm is None:
-            self.channel_sm = ()
+        if isinstance(self.channel_primary, Number):
+            self.channel_primary = (self.channel_primary,)
+        elif isinstance(self.channel_primary, list):
+            self.channel_primary = tuple(self.channel_primary)
+        elif self.channel_primary is None:
+            self.channel_primary = ()
+        if isinstance(self.channel_secondary, Number):
+            self.channel_secondary = (self.channel_secondary,)
+        elif isinstance(self.channel_secondary, list):
+            self.channel_secondary = tuple(self.channel_secondary)
+        elif self.channel_secondary is None:
+            self.channel_secondary = ()
         if isinstance(self.dist_channel, Number):
             self.dist_channel = (0, self.dist_channel)
         if isinstance(self.dist_frame, Number):
@@ -254,7 +255,7 @@ class TrackAnalysis:
         for file in self.bead_files:
             calib_file = self.path_out / file.with_suffix(".cyllens_calib.pk").name
             if calib_file.exists():
-                with open(calib_file, 'rb') as f:
+                with open(calib_file, "rb") as f:
                     res = pickle.load(f)
             else:
                 res = calibrate_z(file, self.wavelengths, self.cyllenschannels, path=self.path_out / file.stem)
@@ -284,7 +285,7 @@ class TrackAnalysis:
         )
         unfiltered, filtered, refitted, refiltered, warped = [], [], [], [], []
         for c in range(self.im.shape["c"]):
-            if c in (*self.channel_label, *self.channel_main, *self.channel_sm):
+            if c in (*self.channel_label, *self.channel_primary, *self.channel_secondary):
                 f0 = self.detected.query(f"C=={c}").copy()
                 self.im.frame_decorator = lambda im, frame, c, z, t: images.gfilter(frame, im.sigma[c])  # noqa
                 if c in self.cyllenschannels:
@@ -440,14 +441,14 @@ class TrackAnalysis:
         print("Tracking points")
         linked = []
         particle = 0
-        for c in (*self.channel_label, *self.channel_main, *self.channel_sm):
+        for c in (*self.channel_label, *self.channel_primary, *self.channel_secondary):
             if c is not None:
                 tl = self.warped.query(f"C=={c}").copy()
                 if len(tl):
                     cols = ["x_um", "y_um", "z_um"] if c in self.cyllenschannels and self.track3D else ["x_um", "y_um"]
-                    tl = tl.sort_values('T')
+                    tl = tl.sort_values("T")
                     tl["z_um"] = tl["z_um"].ffill()
-                    tl = tl.dropna(subset=['T', 'x_um', 'y_um'])
+                    tl = tl.dropna(subset=["T", "x_um", "y_um"])
                     loc = trackpy.link_df(
                         tl,
                         search_range=self.dist_frame[1] * self.im.pxsize_um,
@@ -478,7 +479,7 @@ class TrackAnalysis:
     @cached_property
     def filled(self) -> pandas.DataFrame:
         if self.channel_label:
-            label = tracking.localize_main(
+            label = tracking.localize_primary(
                 self.linked,
                 self.im,
                 self.jm.transform,
@@ -492,84 +493,84 @@ class TrackAnalysis:
             )
             if len(self.channel_label) > 1:
                 label = self.link_channels(label, 10, self.channel_label)
-            if self.channel_main:
-                main = tracking.localise_sm(
+            if self.channel_primary:
+                primary = tracking.localise_secondary(
                     label,
                     self.im,
                     self.jm.transform,
-                    self.channel_main,
+                    self.channel_primary,
                     self.cyllenschannels,
                     self.piezoval,
                     self.timeval,
                     self.dist_channel,
                 )
-                if self.channel_sm:
-                    sm = tracking.localise_sm(
-                        main,
+                if self.channel_secondary:
+                    secondary = tracking.localise_secondary(
+                        primary,
                         self.im,
                         self.jm.transform,
-                        self.channel_sm,
+                        self.channel_secondary,
                         self.cyllenschannels,
                         self.piezoval,
                         self.timeval,
                         self.dist_channel,
                     )
                 else:
-                    sm = None
-            elif self.channel_sm:
-                main = None
-                sm = tracking.localise_sm(
+                    secondary = None
+            elif self.channel_secondary:
+                primary = None
+                secondary = tracking.localise_secondary(
                     label,
                     self.im,
                     self.jm.transform,
-                    self.channel_sm,
+                    self.channel_secondary,
                     self.cyllenschannels,
                     self.piezoval,
                     self.timeval,
                     self.dist_channel,
                 )
             else:
-                main, sm = None, None
+                primary, secondary = None, None
         else:
             label = None
-            main = tracking.localize_main(
+            primary = tracking.localize_primary(
                 self.linked,
                 self.im,
                 self.jm.transform,
                 self.im.cnamelist,  # type: ignore
-                self.channel_main,
+                self.channel_primary,
                 self.dist_frame,
                 self.cyllenschannels,
                 self.piezoval,
                 self.timeval,
                 pool=False,
             )
-            if self.channel_sm:
-                sm = tracking.localise_sm(
-                    main,
+            if self.channel_secondary:
+                secondary = tracking.localise_secondary(
+                    primary,
                     self.im,
                     self.jm.transform,
-                    self.channel_sm,
+                    self.channel_secondary,
                     self.cyllenschannels,
                     self.piezoval,
                     self.timeval,
                     self.dist_channel,
                 )
             else:
-                sm = None
-        return pandas.concat([i for i in (label, main, sm) if i is not None], ignore_index=True)
+                secondary = None
+        return pandas.concat([i for i in (label, primary, secondary) if i is not None], ignore_index=True)
 
     @cached_property
     def loc_label(self) -> pandas.DataFrame:
         return self.filled.query(f"C in {self.channel_label}")
 
     @cached_property
-    def loc_main(self) -> pandas.DataFrame:
-        return self.filled.query(f"C in {self.channel_main}")
+    def loc_primary(self) -> pandas.DataFrame:
+        return self.filled.query(f"C in {self.channel_primary}")
 
     @cached_property
-    def loc_sm(self) -> pandas.DataFrame:
-        return self.filled.query(f"C in {self.channel_sm}")
+    def loc_secondary(self) -> pandas.DataFrame:
+        return self.filled.query(f"C in {self.channel_secondary}")
 
     @cached_property
     def brightest(self) -> pandas.DataFrame:
@@ -578,16 +579,16 @@ class TrackAnalysis:
             p = list(self.loc_label["particle"].unique())
             i_peak = [self.loc_label.query(f"link==0 & particle=={q}")["i_peak"].sum() for q in p]
         else:
-            p = list(self.loc_main["particle"].unique())
-            i_peak = [self.loc_main.query(f"link==0 & particle=={q}")["i_peak"].sum() for q in p]
+            p = list(self.loc_primary["particle"].unique())
+            i_peak = [self.loc_primary.query(f"link==0 & particle=={q}")["i_peak"].sum() for q in p]
         self.particle = p[np.argmax(i_peak)]  # noqa
         if self.channel_label:
             label = self.loc_label.query(f"particle=={self.particle}")
         else:
             label = None
-        sm = self.loc_sm.query(f"particle=={self.particle}")
-        main = self.loc_main.query(f"particle=={self.particle}")
-        return pandas.concat([i for i in (label, main, sm) if i is not None], ignore_index=True)
+        primary = self.loc_primary.query(f"particle=={self.particle}")
+        secondary = self.loc_secondary.query(f"particle=={self.particle}")
+        return pandas.concat([i for i in (label, primary, secondary) if i is not None], ignore_index=True)
 
     @staticmethod
     def link_channels(df: pandas.DataFrame, distance: float, channels: Sequence[int]) -> pandas.DataFrame:
@@ -626,15 +627,15 @@ class TrackAnalysis:
 
     @cached_property
     def loc_label_brightest(self) -> pandas.DataFrame:
-        return self.brightest.query(f"C in {self.channel_label}").sort_values('T')
+        return self.brightest.query(f"C in {self.channel_label}").sort_values("T")
 
     @cached_property
-    def loc_main_brightest(self) -> pandas.DataFrame:
-        return self.brightest.query(f"C in {self.channel_main}").sort_values('T')
+    def loc_primary_brightest(self) -> pandas.DataFrame:
+        return self.brightest.query(f"C in {self.channel_primary}").sort_values("T")
 
     @cached_property
-    def loc_sm_brightest(self) -> pandas.DataFrame:
-        return self.brightest.query(f"C in {self.channel_sm}").sort_values('T')
+    def loc_secondary_brightest(self) -> pandas.DataFrame:
+        return self.brightest.query(f"C in {self.channel_secondary}").sort_values("T")
 
     @cached_property
     def background(self) -> pandas.DataFrame:
@@ -646,12 +647,12 @@ class TrackAnalysis:
         return self.background.query(f"C in {self.channel_label}")
 
     @cached_property
-    def background_main(self) -> pandas.DataFrame:
-        return self.background.query(f"C in {self.channel_main}")
+    def background_primary(self) -> pandas.DataFrame:
+        return self.background.query(f"C in {self.channel_primary}")
 
     @cached_property
-    def background_sm(self) -> pandas.DataFrame:
-        return self.background.query(f"C in {self.channel_sm}")
+    def background_secondary(self) -> pandas.DataFrame:
+        return self.background.query(f"C in {self.channel_secondary}")
 
     def plot(self) -> None:
         with PdfPages(self.path_out / f"{self.exp_name}_cellnr_{self.cellnr}_trk_results_trace.pdf") as pdf:
@@ -680,14 +681,14 @@ class TrackAnalysis:
         cmap = ListedColormap(cmap)
 
         fig.add_subplot(gs[0, 0])
-        plt.imshow(self.im[self.channel_main[0], self.im.shape["t"] // 2], cmap="gray")
-        plt.title(f"main channel ({self.channel_main[0]}), t = {self.im.shape['t'] // 1}")
+        plt.imshow(self.im[self.channel_primary[0], self.im.shape["t"] // 2], cmap="gray")
+        plt.title(f"primary channel ({self.channel_primary[0]}), t = {self.im.shape['t'] // 1}")
         fig.add_subplot(gs[1, 0])
         plt.imshow(self.meant, cmap="gray")
         plt.title(f"mean <t> image in mask channel ({self.channel_mask})")
         fig.add_subplot(gs[0, 1])
         plt.imshow(self.cell, cmap=cmap, vmax=256)
-        plt.title("cell mask")
+        plt.title("cell mask or ROI")
         for i in range(int(self.cell.max())):
             try:
                 plt.text(
@@ -701,7 +702,7 @@ class TrackAnalysis:
                 pass
         fig.add_subplot(gs[1, 1])
         plt.imshow(self.nuc, cmap=cmap, vmax=256)
-        plt.title("nucleus mask")
+        plt.title("nucleus mask or ROI")
         for i in range(int(self.nuc.max())):
             try:
                 plt.text(
@@ -737,20 +738,20 @@ class TrackAnalysis:
 
     def plot_localizations(self, pdf: PdfPages = None) -> None:
         fig = plt.figure(figsize=A4)
-        gs = GridSpec(1, len((*self.channel_label, *self.channel_main, *self.channel_sm)) + 1, figure=fig)
+        gs = GridSpec(1, len((*self.channel_label, *self.channel_primary, *self.channel_secondary)) + 1, figure=fig)
         fig.add_subplot(gs[0, 0])
-        localisation.plot_localisations(self.linked, self.jm, self.channel_mask, 0, self.jm.shape['t'] // 2, False)
+        localisation.plot_localisations(self.linked, self.jm, self.channel_mask, 0, self.jm.shape["t"] // 2, False)
         c = 1
-        for ch in (*self.channel_label, *self.channel_main, *self.channel_sm):
+        for ch in (*self.channel_label, *self.channel_primary, *self.channel_secondary):
             if not (tp := self.linked.query(f"C == {ch}").dropna()).empty:
                 fig.add_subplot(gs[0, c])
-                for _, group in tp.groupby('particle'):
-                    plt.plot(*group[['x_um', 'y_um']].to_numpy().T, '-o', ms=3)
+                for _, group in tp.groupby("particle"):
+                    plt.plot(*group[["x_um", "y_um"]].to_numpy().T, "-o", ms=3)
                 plt.gca().invert_yaxis()
-                plt.axis('equal')
-                plt.xlabel(r'x (μm)')
-                plt.ylabel(r'y (μm)')
-                plt.title(f'tracks in channel {ch}')
+                plt.axis("equal")
+                plt.xlabel(r"x (μm)")
+                plt.ylabel(r"y (μm)")
+                plt.title(f"tracks in channel {ch}")
                 c += 1
         plt.tight_layout()
         if pdf:
@@ -799,11 +800,18 @@ class TrackAnalysis:
 
     @cached_property
     def data(self) -> pandas.DataFrame:
-        return pandas.concat([i for i in (self.loc_label_brightest, self.loc_main_brightest, self.loc_sm_brightest) if i is not None], ignore_index=True)
+        return pandas.concat(
+            [
+                i
+                for i in (self.loc_label_brightest, self.loc_primary_brightest, self.loc_secondary_brightest)
+                if i is not None
+            ],
+            ignore_index=True,
+        )
 
     @cached_property
     def channel(self) -> tuple[int, ...]:
-        return *self.channel_label, *self.channel_main, *self.channel_sm
+        return *self.channel_label, *self.channel_primary, *self.channel_secondary
 
     @cached_property
     def color(self) -> str:
@@ -821,7 +829,7 @@ class TrackAnalysis:
                 plt.close(fig)
 
     def plot_traces(self, pdf: PdfPages = None) -> None:
-        channels = self.channel_label + self.channel_main + self.channel_sm
+        channels = self.channel_label + self.channel_primary + self.channel_secondary
         fig = self.show_data(self.data, self.color, channels)
         if pdf:
             pdf.savefig(fig)
@@ -869,7 +877,7 @@ class TrackAnalysis:
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], 1000 * d["s_um"], c)
 
-        plt.xlim(0, self.loc_sm["t"].max())
+        plt.xlim(0, self.loc_secondary["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("sigma (nm)")
 
@@ -877,7 +885,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["o"], c)
-        plt.xlim(0, self.loc_sm["t"].max())
+        plt.xlim(0, self.loc_secondary["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("offset")
 
@@ -885,7 +893,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["e"], c)
-        plt.xlim(0, self.loc_sm["t"].max())
+        plt.xlim(0, self.loc_secondary["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("ellipticity")
 
@@ -893,7 +901,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["z_um"], c)
-        plt.xlim(0, self.loc_sm["t"].max())
+        plt.xlim(0, self.loc_secondary["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel(r"z ($\mathrm{\mu}$m)")
 
@@ -901,7 +909,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["i_peak"], c)
-        plt.xlim(0, self.loc_sm["t"].max())
+        plt.xlim(0, self.loc_secondary["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("peak intensity")
 
@@ -909,7 +917,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["i"], c)
-        plt.xlim(0, self.loc_sm["t"].max())
+        plt.xlim(0, self.loc_secondary["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("integrated intensity")
 
@@ -957,8 +965,7 @@ class TrackAnalysis:
     def show_data(data: pandas.DataFrame, color: Sequence[str], channels: Sequence[int]) -> plt.Figure:
         data = [data.query(f"C == {C}").sort_values("T") for C in channels]
         fig = plt.figure(figsize=(11.69, 8.27))
-        gs = GridSpec(2 + len(data), 2, figure=fig,
-                      height_ratios=(3,) + (1,) * (1 + len(data)), width_ratios=(2.5, 1))
+        gs = GridSpec(2 + len(data), 2, figure=fig, height_ratios=(3,) + (1,) * (1 + len(data)), width_ratios=(2.5, 1))
 
         t_max = max([d["t"].max() for d in data])
 
@@ -970,14 +977,14 @@ class TrackAnalysis:
         plt.xlabel("time (s)")
         plt.ylabel("fluorescence (AU)")
 
-
         if len(data) >= 2:
             fig.add_subplot(gs[1, 0])
             g, r = data[-2:]
             plt.plot(
                 g["t"],
                 np.sqrt(
-                    (r["x_um"].to_numpy() - g["x_um"].to_numpy()) ** 2 + (r["y_um"].to_numpy() - g["y_um"].to_numpy()) ** 2
+                    (r["x_um"].to_numpy() - g["x_um"].to_numpy()) ** 2
+                    + (r["y_um"].to_numpy() - g["y_um"].to_numpy()) ** 2
                 ),
                 "k",
             )
@@ -994,9 +1001,9 @@ class TrackAnalysis:
         fig.add_subplot(gs[0, 1])
         for d, c in zip(data, color):
             plt.plot(d["x_um"], d["y_um"], c)
-        plt.xlabel(r'x (μm)')
-        plt.ylabel(r'y (μm)')
-        plt.axis('equal')
+        plt.xlabel(r"x (μm)")
+        plt.ylabel(r"y (μm)")
+        plt.axis("equal")
         plt.gca().invert_yaxis()
         # fig.suptitle(d.name)
         plt.tight_layout()
@@ -1123,8 +1130,7 @@ class TrackAnalysis:
                 qos = max(positions) + 1
                 for pos, channel in zip(positions, range(1, len(channels) + 1)):
                     im_dict[qos, channel] = im_dict[pos, channel]
-                im_dict[qos, 0] = 65535 * np.any([im_dict[pos, 0] > 0
-                                                  for pos in positions if (pos, 0) in im_dict], 0)
+                im_dict[qos, 0] = 65535 * np.any([im_dict[pos, 0] > 0 for pos in positions if (pos, 0) in im_dict], 0)
                 positions.append(qos)
 
             # combine cropped image and yx channel
@@ -1166,10 +1172,10 @@ def main() -> None:
     parser = ArgumentParser(description="Display info and save as tif")
     parser.add_argument("files", help="image files", type="str", nargs="*")
     parser.add_argument("-f", "--folder", help="folder with image files", type=Path, default=".")
-    parser.add_argument("-L", "--labelch", help="label channels", nargs="*", type=int)
-    parser.add_argument("-M", "--mainch", help="main channels", nargs="*", type=int)
-    parser.add_argument("-S", "--smch", help="sm channels", nargs="*", type=int)
-    parser.add_argument("-m", "--maskch", help="mask channel", default=1, type=int)
+    parser.add_argument("-L", "--label_channels", help="label channels", nargs="*", type=int)
+    parser.add_argument("-P", "--primary_channels", help="primary channels", nargs="*", type=int)
+    parser.add_argument("-S", "--secondary_channels", help="secondary channels", nargs="*", type=int)
+    parser.add_argument("-m", "--mask_channel", help="mask channel", default=1, type=int)
     parser.add_argument("-d", "--dist_channel", help="search radius in other channel", default=3, type=float)
     parser.add_argument("-e", "--dist_frame", help="search readius in next frame", default=10, type=float)
     parser.add_argument("-p", "--path", help="path out", default=None)
@@ -1186,10 +1192,10 @@ def main() -> None:
     if len(fnames) == 1:
         with TrackAnalysis(
             fnames[0],
-            args.labelch,
-            args.mainch,
-            args.smch,
-            args.maskch,
+            args.label_channels,
+            args.primary_channels,
+            args.secondary_channels,
+            args.mask_channel,
             args.dist_channel,
             args.dist_frame,
             args.path,
@@ -1206,10 +1212,10 @@ def main() -> None:
                 cprint(f"<Working on: {fname}:g.b>")
                 with TrackAnalysis(
                     fname,
-                    args.labelch,
-                    args.mainch,
-                    args.smch,
-                    args.maskch,
+                    args.label_channels,
+                    args.primary_channels,
+                    args.secondary_channels,
+                    args.mask_channel,
                     args.dist_channel,
                     args.dist_frame,
                     args.path,

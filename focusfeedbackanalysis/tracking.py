@@ -42,11 +42,11 @@ def interp_nan(g):
             g.loc[i, "link"] = 4
 
 
-def localize_main(master, im, transform, cnamelist, mchannel, dist, cylchannels, piezoval, timeval, pool=True):
-    """Completes tracks in master"""
+def localize_primary(primary, im, transform, cnamelist, mchannel, dist, cylchannels, piezoval, timeval, pool=True):
+    """Completes tracks in primary"""
     finals = []
     for ch in mchannel:
-        m = master.query(f"C == {ch}").copy()
+        m = primary.query(f"C == {ch}").copy()
         m = complete_track(m, im, transform, cnamelist, cylchannels, piezoval, timeval, dist, pool=pool)
         # keep only complete tracks
         p = []
@@ -61,15 +61,15 @@ def localize_main(master, im, transform, cnamelist, mchannel, dist, cylchannels,
     return pandas.concat(finals, ignore_index=True)
 
 
-def localise_sm(master, im, transform, slchannel, cylchannels, piezoval, timeval, dist=10):
-    """Localizes points dist around master in slave channel, mode: combine, each"""
-    if master.empty:
-        return pandas.DataFrame(np.zeros((0, len(master.columns))), master.columns)
+def localise_secondary(primary, im, transform, slchannel, cylchannels, piezoval, timeval, dist=10):
+    """Localizes points dist around primary in secondary channel, mode: combine, each"""
+    if primary.empty:
+        return pandas.DataFrame(np.zeros((0, len(primary.columns))), primary.columns)
     else:
-        master = master.copy()
-        slave = []
-        for sch, particle in product(slchannel, master["particle"].unique()):
-            s0 = master.query(f"particle == {particle}")
+        primary = primary.copy()
+        secondary = []
+        for sch, particle in product(slchannel, primary["particle"].unique()):
+            s0 = primary.query(f"particle == {particle}")
             for T in s0["T"].unique():
                 s1 = s0.query(f"T == {T}")
                 s = s1.iloc[[0]].copy()
@@ -77,10 +77,10 @@ def localise_sm(master, im, transform, slchannel, cylchannels, piezoval, timeval
                 s["C"] = sch
                 s[["x", "y"]] = s1[["x", "y"]].mean().to_numpy()
                 s["e"] = np.exp(np.log(s["e"]).mean())
-                slave.append(s)
+                secondary.append(s)
 
-        slave = pandas.concat(slave, ignore_index=True)
-        slave = slave.convert_dtypes(True, False, False, False)
+        secondary = pandas.concat(secondary, ignore_index=True)
+        secondary = secondary.convert_dtypes(True, False, False, False)
 
         def fun(c, im, time, dist):  # noqa
             index, h = c
@@ -96,12 +96,18 @@ def localise_sm(master, im, transform, slchannel, cylchannels, piezoval, timeval
             return f
 
         g = pandas.concat(
-            pmap(fun, slave.iterrows(), (im, transform, dist), desc="Finding slave molecules", total=len(slave)),
+            pmap(
+                fun,
+                secondary.iterrows(),
+                (im, transform, dist),
+                desc="Finding secondary particles",
+                total=len(secondary),
+            ),
             axis=0,
         ).sort_values(by=["C", "T", "particle"])
         g = localisation.insert_z(g, im, cylchannels, piezoval, timeval)
         g = localisation.attach_units(g, im.pxsize_um)
-        return pandas.DataFrame(g, columns=master.columns)
+        return pandas.DataFrame(g, columns=primary.columns)
 
 
 def plot_track(f, channel=None):
@@ -395,9 +401,18 @@ def gaps(m, mx, min_len):
     return missing
 
 
-def loc(f: pandas.DataFrame | pandas.Series, im: np.ndarray, s: float, transform: Transforms, cnamelist: Sequence[str],
-        filtr: bool, dist: tuple[int, int] = (0, 15), tilt: bool = False,
-        sigma: bool = False, xy: tuple[float, float] = False) -> pandas.DataFrame:
+def loc(
+    f: pandas.DataFrame | pandas.Series,
+    im: np.ndarray,
+    s: float,
+    transform: Transforms,
+    cnamelist: Sequence[str],
+    filtr: bool,
+    dist: tuple[int, int] = (0, 15),
+    tilt: bool = False,
+    sigma: bool = False,
+    xy: tuple[float, float] = False,
+) -> pandas.DataFrame:
     """f: dataframe, single line, single localisation, xy corrected
     im: uncorrected frame
     T: transform used to correct
@@ -580,19 +595,27 @@ def link(f, im, transform, cnamelist, q, min_len=50, steps=5, lim=5, fw=True, ne
     return f
 
 
-def find_around(master, slave, dist):
+def find_around(primary, secondary, dist):
     locs = []
-    for _, row in master.iterrows():
+    for _, row in primary.iterrows():
         time, x, y = row[["T", "x", "y"]]
-        time2 = slave.query(f"T=={time}").copy()
+        time2 = secondary.query(f"T=={time}").copy()
         time2["dist2"] = (time2["x"] - x) ** 2 + (time2["y"] - y) ** 2
         locs.append(time2.query(f"dist2<={dist**2}"))
     return pandas.concat(locs).sort_index()
 
 
-def forced_localise(h: pandas.DataFrame | pandas.Series, im: np.ndarray, jm: np.ndarray, sigma: Sequence[float],
-                    transform: Transforms, cnamelist: Sequence[str], dist=(0, 5), steps=1) -> pandas.DataFrame:
-    """ jm: steps averaged frames """
+def forced_localise(
+    h: pandas.DataFrame | pandas.Series,
+    im: np.ndarray,
+    jm: np.ndarray,
+    sigma: Sequence[float],
+    transform: Transforms,
+    cnamelist: Sequence[str],
+    dist=(0, 5),
+    steps=1,
+) -> pandas.DataFrame:
+    """jm: steps averaged frames"""
     if not isinstance(h, pandas.DataFrame):
         h = pandas.DataFrame(h).T
 
@@ -624,7 +647,10 @@ def forced_localise(h: pandas.DataFrame | pandas.Series, im: np.ndarray, jm: np.
             f = a2
             route = 0
         elif not (
-            dist[0] ** 2 < (float(a2["x"].iloc[0]) - float(h["x"].iloc[0])) ** 2 + (float(a2["y"].iloc[0]) - float(h["y"].iloc[0])) ** 2 < dist[1] ** 2
+            dist[0] ** 2
+            < (float(a2["x"].iloc[0]) - float(h["x"].iloc[0])) ** 2
+            + (float(a2["y"].iloc[0]) - float(h["y"].iloc[0])) ** 2
+            < dist[1] ** 2
         ):
             if not (max(sigma / 2, 1) < float(h["s"].iloc[0]) < sigma * 2) or not (0.65 < float(h["e"].iloc[0]) < 1.3):
                 f = a1
@@ -728,11 +754,7 @@ def kymograph(im, f, timeval, r=25, s=25):
             # plt.subplot(2*lp, 1, 2*idx+1)
             fig.add_subplot(gs[2 * idx, 0])
             plt.imshow(x[:, :, idx], extent=extent, aspect=aspect)  # type: ignore
-            dx = 100 * h[idx]["dx_um"]
-            dx[dx == 0] = np.nan
-            plt.plot(h[idx]["t"], h[idx]["x_um"] - im.pxsize_um * xy[idx][0] - dx, "--r")
             plt.plot(h[idx]["t"], h[idx]["x_um"] - im.pxsize_um * xy[idx][0], ".r", alpha=0.35, markersize=3)
-            plt.plot(h[idx]["t"], h[idx]["x_um"] - im.pxsize_um * xy[idx][0] + dx, "--r")
             plt.ylim(im.pxsize_um * r, -im.pxsize_um * r)
             plt.xlabel("t")
             plt.ylabel(r"x (μm)")
@@ -740,11 +762,7 @@ def kymograph(im, f, timeval, r=25, s=25):
             # plt.subplot(2*lp, 1, 2*idx+2)
             fig.add_subplot(gs[2 * idx + 1, 0])
             plt.imshow(y[:, :, idx], extent=extent, aspect=aspect)  # type: ignore
-            dy = 100 * h[idx]["dy_um"]
-            dy[dy == 0] = np.nan
-            plt.plot(h[idx]["t"], h[idx]["y_um"] - im.pxsize_um * xy[idx][1] - dy, "--r")
             plt.plot(h[idx]["t"], h[idx]["y_um"] - im.pxsize_um * xy[idx][1], ".r", alpha=0.35, markersize=3)
-            plt.plot(h[idx]["t"], h[idx]["y_um"] - im.pxsize_um * xy[idx][1] + dy, "--r")
             plt.ylim(im.pxsize_um * r, -im.pxsize_um * r)
             plt.xlabel("t (s)")
             plt.ylabel(r"y (μm)")
