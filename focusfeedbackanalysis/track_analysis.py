@@ -85,6 +85,8 @@ class TrackAnalysis:
         dist_frame: maximum distance (pixels) between the label or primary
             particle in consecutive frames
         path_out: where to save the analysis
+        calibration_path: storage for calibration files, so that they can be
+            reused
         mask_method: ("square", size), ("findcells", kwargs_dict),
             ("array", numpy array) or ("roifile", /path/to/file.roi)
         bead_files: list of paths to bead files to use for various
@@ -105,6 +107,7 @@ class TrackAnalysis:
     dist_channel: float | tuple[int, float] = 3
     dist_frame: float | tuple[int, float] = 5
     path_out: Path | str = None
+    calibration_path: Path | str = None
     mask_method: tuple[str] = ("square", 30)
     bead_files: Sequence[Path | str] = None
     wavelengths: tuple = None
@@ -161,6 +164,15 @@ class TrackAnalysis:
         else:
             self.path_out = Path(self.path_out)
         self.path_out.mkdir(parents=True, exist_ok=True)
+
+        if self.calibration_path is None:
+            self.calibration_path = Path(str(self.image_file.parent).replace("data", "analysis"))
+        elif not Path(self.calibration_path).is_absolute():
+            self.calibration_path = Path(str(self.image_file.parent).replace("data", "analysis")) / Path(self.calibration_path)
+        else:
+            self.calibration_path = Path(self.calibration_path)
+        self.calibration_path.mkdir(parents=True, exist_ok=True)
+
         self.exp_name = self.image_file.stem
         self.file = self.path_out / self.image_file.with_suffix(".pk").name
 
@@ -253,12 +265,12 @@ class TrackAnalysis:
         # TODO: use (track, detector) in stead of channels
         theta = []
         for file in self.bead_files:
-            calib_file = self.path_out / file.with_suffix(".cyllens_calib.pk").name
+            calib_file = self.calibration_path / file.with_suffix(".cyllens_calib.pk").name
             if calib_file.exists():
                 with open(calib_file, "rb") as f:
                     res = pickle.load(f)
             else:
-                res = calibrate_z(file, self.wavelengths, self.cyllenschannels, path=self.path_out / file.stem)
+                res = calibrate_z(file, self.wavelengths, self.cyllenschannels, path=self.calibration_path / file.stem)
                 with open(calib_file, "wb") as f:
                     pickle.dump(res, f)  # type: ignore
             theta.append(res["theta"])
@@ -430,7 +442,7 @@ class TrackAnalysis:
     def i_calibration(self) -> Optional[tuple[float, float, float, float]]:
         return (
             localisation.calibrate_intensity(
-                self.im, self.bead_files, self.cyllenschannels, self.piezoval, self.timeval
+                self.im, self.bead_files, self.calibration_path, self.cyllenschannels, self.piezoval, self.timeval
             )
             if self.bead_files
             else None

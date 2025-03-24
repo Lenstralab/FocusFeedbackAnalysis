@@ -220,6 +220,7 @@ def gaussian_1d(p: Sequence[float], x: float | np.ndarray) -> np.ndarray:
 def calibrate_intensity(
     im: Imread,
     files: Sequence[str | Path],
+    calibration_path: str | Path,
     channels: Sequence[int],
     piezoval: pandas.DataFrame,
     timeval: Sequence[float],
@@ -229,25 +230,19 @@ def calibrate_intensity(
     im: Imread instance or path to image file
     z0, s, dz0, ds: calibration parameters and their sER
     """
-    # if im.beadfile is None:
-    #     im.get_bead_files()
-    #     pdfpath = os.path.join(os.path.dirname(im).replace('data', 'analysis'), 'intensity_calib.pdf')
-    #     ymlpath = os.path.join(os.path.dirname(im).replace('data', 'analysis'), 'intensity_calib.yml')
-    # else:
-    pdfpath = os.path.join(os.path.dirname(im.path).replace("data", "analysis"), "intensity_calib.pdf")  # type: ignore
-    ymlpath = os.path.join(os.path.dirname(im.path).replace("data", "analysis"), "intensity_calib.yml")  # type: ignore
+    calibration_path.mkdir(parents=True, exist_ok=True)
+    pdfpath = calibration_path / "intensity_calib.pdf"
+    ymlpath = calibration_path / "intensity_calib.yml"
 
-    if not replace and os.path.exists(ymlpath):
+    if not replace and ymlpath.exists():
         with open(ymlpath) as f:
             r = yamlload(f)
         return r["z0"], r["s"], r["dz0"], r["ds"]
 
-    os.makedirs(os.path.split(pdfpath)[0], exist_ok=True)
-
     # Find bead files and load localisations
     ress = []
     for file in files:
-        with open(f"{os.path.splitext(str(file).replace('data', 'analysis'))[0]}_Cyllens_calib.pkl", "rb") as stream:
+        with open(calibration_path / file.with_suffix(".cyllens_calib.pk").name, "rb") as stream:
             ress.append(pickle.load(stream))
 
     # Combine results from bead files
@@ -389,7 +384,7 @@ def calibrate_intensity(
     zz = np.linspace(np.nanmin(z2s), np.nanmax(z2s), 250)
     fig.add_subplot(gs[2, :])
     plt.plot(z2s, intensity, ".")
-    fit = plt.plot(zz, gaussian_1d(pe, float(zz)), "-r")
+    fit = plt.plot(zz, gaussian_1d(pe, zz.astype(float)), "-r")
     plt.xlabel(r"z_ell (μm)")
     plt.ylabel("peak intensity")
     plt.legend(fit, ("z0: {:.2f} um\ns:  {:.2f} um\nA: {:.2f}".format(*pe),))
