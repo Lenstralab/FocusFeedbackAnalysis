@@ -210,7 +210,7 @@ def insert_z(
     return f
 
 
-def gaussian_1d(p: Sequence[float], x: float) -> np.ndarray:
+def gaussian_1d(p: Sequence[float], x: float | np.ndarray) -> np.ndarray:
     """p: (mu, sigma, A, O)"""
     if len(p) == 3:
         return p[2] / p[1] / np.sqrt(2 * np.pi) * np.exp(-((x - p[0]) ** 2) / 2 / p[1] ** 2)
@@ -343,7 +343,7 @@ def calibrate_intensity(
     dp, r2 = fminerr(lambda p: gaussian_1d(p, z0), p, intensity0)  # noqa
 
     zz = np.linspace(-1, 1, 250)
-    plt.plot(zz, gaussian_1d(p, float(zz)), "-r")
+    plt.plot(zz, gaussian_1d(p, zz.astype(float)), "-r")
     plt.xlim(-1, 1)
     plt.xlabel(r"z (μm)")
     plt.ylabel("peak intensity")

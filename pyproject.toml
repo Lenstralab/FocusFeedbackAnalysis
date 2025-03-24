@@ -1,6 +1,6 @@
 [project]
 name = "focusfeedbackanalysis"
-version = "2025.3.1"
+version = "2025.3.2"
 description = "Focus feedback analysis, from time-lapse to time trace."
 license = { text = "GPL-3.0-or-later"}
 readme = "README.md"
