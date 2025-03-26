@@ -168,7 +168,9 @@ class TrackAnalysis:
         if self.calibration_path is None:
             self.calibration_path = Path(str(self.image_file.parent).replace("data", "analysis"))
         elif not Path(self.calibration_path).is_absolute():
-            self.calibration_path = Path(str(self.image_file.parent).replace("data", "analysis")) / Path(self.calibration_path)
+            self.calibration_path = Path(str(self.image_file.parent).replace("data", "analysis")) / Path(
+                self.calibration_path
+            )
         else:
             self.calibration_path = Path(self.calibration_path)
         self.calibration_path.mkdir(parents=True, exist_ok=True)
@@ -460,7 +462,7 @@ class TrackAnalysis:
                     cols = ["x_um", "y_um", "z_um"] if c in self.cyllenschannels and self.track3D else ["x_um", "y_um"]
                     tl = tl.sort_values("T")
                     tl["z_um"] = tl["z_um"].ffill()
-                    tl = tl.dropna(subset=["T", "x_um", "y_um"])
+                    tl = tl.dropna(subset=["T"] + cols)
                     loc = trackpy.link_df(
                         tl,
                         search_range=self.dist_frame[1] * self.im.pxsize_um,
@@ -1083,7 +1085,7 @@ class TrackAnalysis:
             )
         ListFile(d).save(self.path_out / f"{self.exp_name}.list.yml")
 
-    def show_tracking_ncolor(self):
+    def show_tracking_ncolor(self) -> None:
         """write tif file showing the track"""
         size = 100
         im = self.jm.transpose("tczyx")  # type: ignore
@@ -1143,11 +1145,13 @@ class TrackAnalysis:
                 for pos, channel in zip(positions, range(1, len(channels) + 1)):
                     im_dict[qos, channel] = im_dict[pos, channel]
                 im_dict[qos, 0] = 65535 * np.any([im_dict[pos, 0] > 0 for pos in positions if (pos, 0) in im_dict], 0)
-                positions.append(qos)
+                frame_positions = positions + [qos]  # prevent mutating positions
+            else:
+                frame_positions = positions
 
             # combine cropped image and yx channel
             return [
-                np.hstack([im_dict.get((pos, channel), blank) for pos in positions]).astype("uint16")
+                np.hstack([im_dict.get((pos, channel), blank) for pos in frame_positions]).astype("uint16")
                 for channel in range(len(channels) + 1)
             ]
 
