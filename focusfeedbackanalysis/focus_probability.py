@@ -154,5 +154,5 @@ def plot_time_diff(dt: float, r: float, dr: float, diff_c_range: Sequence[float,
     plt.xlim(diff_c_range)
     plt.xlabel("D (μm$^2$/s)")
     plt.ylabel("total time (s)")
-    plt.title("isoprobability P(in focus), interval: 5 s")
+    plt.title(f"isoprobability P(in focus), interval: {dt} s")
     plt.legend()
