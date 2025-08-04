@@ -338,7 +338,7 @@ def calibrate_intensity(
     dp, r2 = fminerr(lambda p: gaussian_1d(p, z0), p, intensity0)  # noqa
 
     zz = np.linspace(-1, 1, 250)
-    plt.plot(zz, gaussian_1d(p, zz.astype(float)), "-r")
+    plt.plot(zz, gaussian_1d(p, zz.astype(float)), "-m")
     plt.xlim(-1, 1)
     plt.xlabel(r"z (μm)")
     plt.ylabel("peak intensity")
@@ -355,7 +355,7 @@ def calibrate_intensity(
     x = np.linspace(-0.3, 0.3)
     fig.add_subplot(gs[1, 0])
     plt.plot(zs, z2s, ".")
-    plt.plot(x, np.polyval(m, x), "-r")
+    plt.plot(x, np.polyval(m, x), "-m")
     plt.plot()
     plt.xlabel(r"z (μm)")
     plt.ylabel(r"z_ell (μm)")
@@ -368,7 +368,7 @@ def calibrate_intensity(
     x = np.linspace(0.5, 1.5)
     fig.add_subplot(gs[1, 1])
     plt.plot(ellipticity, intensity, ".")
-    plt.plot(x, np.polyval(fit, x), "-r")
+    plt.plot(x, np.polyval(fit, x), "-m")
     plt.xlabel("ellipticity")
     plt.ylabel("peak intensity")
 
@@ -384,7 +384,7 @@ def calibrate_intensity(
     zz = np.linspace(np.nanmin(z2s), np.nanmax(z2s), 250)
     fig.add_subplot(gs[2, :])
     plt.plot(z2s, intensity, ".")
-    fit = plt.plot(zz, gaussian_1d(pe, zz.astype(float)), "-r")
+    fit = plt.plot(zz, gaussian_1d(pe, zz.astype(float)), "-m")
     plt.xlabel(r"z_ell (μm)")
     plt.ylabel("peak intensity")
     plt.legend(fit, ("z0: {:.2f} um\ns:  {:.2f} um\nA: {:.2f}".format(*pe),))

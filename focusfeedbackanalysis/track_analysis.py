@@ -31,7 +31,7 @@ from tllab_common.misc import cprint
 from tqdm.auto import trange
 
 from . import images, localisation, tracking
-from .livecell_functions import ExpData, ListFile
+from .livecell_functions import ListFile
 
 A4 = 11.69, 8.27
 
@@ -245,7 +245,7 @@ class TrackAnalysis:
         cellpos = images.get_nearest_px_msk(
             self.nuc.astype(float), [int(self.im.shape["x"] / 2), int(self.im.shape["y"] / 2)]
         )
-        return int(self.cell[cellpos[1], cellpos[0]])
+        return int(self.cell[cellpos[0], cellpos[1]])
 
     @cached_property
     def mask(self) -> list[np.ndarray]:
@@ -590,18 +590,23 @@ class TrackAnalysis:
     def brightest(self) -> pandas.DataFrame:
         # keep brightest only
         if self.channel_label:
-            p = list(self.loc_label["particle"].unique())
-            i_peak = [self.loc_label.query(f"link==0 & particle=={q}")["i_peak"].sum() for q in p]
+            localizations = self.loc_label
+            channels = self.channel_label
         else:
-            p = list(self.loc_primary["particle"].unique())
-            i_peak = [self.loc_primary.query(f"link==0 & particle=={q}")["i_peak"].sum() for q in p]
-        self.particle = p[np.argmax(i_peak)]  # noqa
+            localizations = self.loc_primary
+            channels = self.channel_primary
+        self.particles = []
+        for channel in channels:
+            loc = localizations.query(f"C==@channel", local_dict=dict(channel=channel))
+            p = list(loc["particle"].unique())
+            i_peak = [loc.query(f"link==0 & particle=={q}")["i_peak"].sum() for q in p]
+            self.particles.append(p[np.argmax(i_peak)])
         if self.channel_label:
-            label = self.loc_label.query(f"particle=={self.particle}")
+            label = self.loc_label.query(f"particle in @particles", local_dict=dict(particles=self.particles))
         else:
             label = None
-        primary = self.loc_primary.query(f"particle=={self.particle}")
-        secondary = self.loc_secondary.query(f"particle=={self.particle}")
+        primary = self.loc_primary.query(f"particle in @particles", local_dict=dict(particles=self.particles))
+        secondary = self.loc_secondary.query(f"particle in @particles", local_dict=dict(particles=self.particles))
         return pandas.concat([i for i in (label, primary, secondary) if i is not None], ignore_index=True)
 
     @staticmethod
@@ -851,7 +856,7 @@ class TrackAnalysis:
 
     def plot_traces_extra(self, pdf: PdfPages = None) -> None:
         fig = plt.figure(figsize=A4)
-        plt.suptitle(f"particle: {int(self.particle)}")
+        plt.suptitle(f"particles: {[int(p) for p in self.particles]}")
         gs = GridSpec(4, 2, figure=fig)
 
         gs0 = GridSpecFromSubplotSpec(1, 5, gs[0, 0])
@@ -891,7 +896,7 @@ class TrackAnalysis:
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], 1000 * d["s_um"], c)
 
-        plt.xlim(0, self.loc_secondary["t"].max())
+        plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("sigma (nm)")
 
@@ -899,7 +904,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["o"], c)
-        plt.xlim(0, self.loc_secondary["t"].max())
+        plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("offset")
 
@@ -907,7 +912,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["e"], c)
-        plt.xlim(0, self.loc_secondary["t"].max())
+        plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("ellipticity")
 
@@ -915,7 +920,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["z_um"], c)
-        plt.xlim(0, self.loc_secondary["t"].max())
+        plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel(r"z ($\mathrm{\mu}$m)")
 
@@ -923,7 +928,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["i_peak"], c)
-        plt.xlim(0, self.loc_secondary["t"].max())
+        plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("peak intensity")
 
@@ -931,7 +936,7 @@ class TrackAnalysis:
         for channel, c in zip(self.channel, self.color):
             d = self.data.query(f"C == {channel}")
             plt.plot(d["t"], d["i"], c)
-        plt.xlim(0, self.loc_secondary["t"].max())
+        plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("integrated intensity")
 
