@@ -857,7 +857,7 @@ class TrackAnalysis:
     def plot_traces_extra(self, pdf: PdfPages = None) -> None:
         fig = plt.figure(figsize=A4)
         plt.suptitle(f"particles: {[int(p) for p in self.particles]}")
-        gs = GridSpec(4, 2, figure=fig)
+        gs = GridSpec(5, 2, figure=fig)
 
         gs0 = GridSpecFromSubplotSpec(1, 5, gs[0, 0])
         fig.add_subplot(gs0[0, :4])
@@ -939,6 +939,22 @@ class TrackAnalysis:
         plt.xlim(0, self.data["t"].max())
         plt.xlabel("time (s)")
         plt.ylabel("integrated intensity")
+
+        fig.add_subplot(gs[4, 0])
+        for channel, c in zip(self.channel, self.color):
+            d = self.background.query(f"C == {channel}")
+            plt.plot(d["t"], d["i_peak"], c)
+        plt.xlim(0, self.data["t"].max())
+        plt.xlabel("time (s)")
+        plt.ylabel("backgound\npeak intensity")
+
+        fig.add_subplot(gs[4, 1])
+        for channel, c in zip(self.channel, self.color):
+            d = self.background.query(f"C == {channel}")
+            plt.plot(d["t"], d["i"], c)
+        plt.xlim(0, self.data["t"].max())
+        plt.xlabel("time (s)")
+        plt.ylabel("backgound\nintegrated intensity")
 
         plt.tight_layout()
         if pdf:
