@@ -1006,11 +1006,10 @@ class TrackAnalysis:
 
         fig.add_subplot(gs[0, 0])
         for d, c in zip(data, color):
-            plt.plot(d["t"], d["i_peak"] / d["i_peak"].max(), c)
+            plt.plot(d["t"], d["i_peak"], c)
         plt.xlim(0, t_max)
-        plt.ylim(0, 1.1)
         plt.xlabel("time (s)")
-        plt.ylabel("fluorescence (AU)")
+        plt.ylabel("peak intensity")
 
         if len(data) >= 2:
             fig.add_subplot(gs[1, 0])
